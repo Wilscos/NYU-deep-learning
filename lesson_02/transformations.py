@@ -1,7 +1,9 @@
+import numpy as np
 import random
 import torch
 import torch.nn as nn
 from matplotlib import pyplot as plt
+from rich import print
 
 
 def compute_bases(dim=2):
@@ -22,8 +24,18 @@ def compute_linear_transformations(x, bases, dim=2):
     weights = linear_layer.weight
     # SVD decomposition
     u, s, v = compute_svd(weights)
+    weights_determinant = np.linalg.det(weights.detach().numpy())
+    if weights_determinant > 0:
+        print(f'\nDeterminant < 0: {weights_determinant}\n'
+              f'- U and V.T can both be rotations with/without reflections\n')
+    elif weights_determinant < 0:
+        print(f'\nDeterminant < 0: {weights_determinant}\n'
+              f'- One of U and V.T will have a reflection\n')
+    elif - 0.01 < weights_determinant < 0.01:
+        print(f'\nDeterminant approx= 0: {weights_determinant}\n'
+              f'- U and V.T can be either rotation or reflection independently\n')
 
-    print('\n- Weight matrix: ')
+    print('\n- [red]Weight matrix[/red]: ')
     print(weights)
 
     print('\n- U matrix: ')
@@ -43,7 +55,7 @@ def compute_linear_transformations(x, bases, dim=2):
         y = model(x)
         y_bases = model(bases)
 
-    return y, y_bases
+    return y, y_bases, u, s ,v
 
 
 def compute_non_linear_transformations(x, bases, dim=2):
@@ -67,7 +79,7 @@ def compute_non_linear_transformations(x, bases, dim=2):
     linear_u, linear_s, linear_v = compute_svd(weights)
     u, s, v = compute_svd(squashed_weights)
 
-    print('\n- Weight matrix: ')
+    print('\n- [blue]Weight matrix[/blue]: ')
     print(weights)
 
     print('\n- U matrix after squashing: ')
@@ -95,7 +107,7 @@ def compute_non_linear_transformations(x, bases, dim=2):
         y = model(x)
         y_bases = model(bases)
 
-    return y, y_bases
+    return y, y_bases, random_activation
 
 
 def compute_svd(w):
@@ -132,6 +144,7 @@ def plot_bases(bases, width=0.04, show=False):
 
     if show:
         plt.show()
+        plt.close()
 
 
 def main():
@@ -147,23 +160,59 @@ def main():
     plot_bases(bases, show=True)
 
     # Linear transform
-    x_transform, bases_transform = compute_linear_transformations(x, bases)
+    x_transform, bases_transform, u, s, v = compute_linear_transformations(x, bases)
     print('\n- Bases after linear transformation: ')
     print(bases_transform)
-    # Plot transformations
+
+    # Plot SVD transformations (to explain what happens step by step)
+    # - U transformation
+    xu = x @ u
+    xu = xu.detach().numpy()
+    bases_u = bases @ u
+    bases_u = bases_u.detach().numpy()
+    scatter_plot(xu,
+                 colors,
+                 f'U transformation (SVD) [Rotation/Reflection]')
+    plot_bases(bases_u, show=True)
+    # - V transformation
+    xv = x @ v.T
+    xv = xv.detach().numpy()
+    bases_v = bases @ v
+    bases_v = bases_v.detach().numpy()
+    scatter_plot(xv,
+                 colors,
+                 f'V.T transformation (SVD) [Rotation/Reflection]')
+    plot_bases(bases_v, show=True)
+    # - S transformation
+    xs = x @ s
+    xs = xs.detach().numpy()
+    xs = xs[:, np.newaxis]
+    xs = np.insert(xs, 1, x[:, 0], axis=1)
+    xs = xs[:, ::-1]
+    bases_s = bases @ s
+    bases_s = bases_s.detach().numpy()
+    bases_s = bases_s[:, np.newaxis]
+    bases_s = np.insert(bases_s, 1, bases[:, 0], axis=1)
+    bases_s = bases_s[:, ::-1]
+    scatter_plot(xs,
+                 colors,
+                 f'S transformation (SVD) [Scaling]')
+    plot_bases(bases_s, show=True)
+
+    # Plot transformations altogether
     scatter_plot(x_transform,
                  colors,
                  f'Linear transformation')
     plot_bases(bases_transform, show=True)
 
     # Squashing
-    x_squashed, bases_squashed = compute_non_linear_transformations(x, bases)
+    x_squashed, bases_squashed, activation = compute_non_linear_transformations(x, bases)
     print('\n- Bases after non-linear transformation: ')
     print(bases_squashed)
     # Plot transformations
     scatter_plot(x_squashed,
                  colors,
-                 f'Non-linear transformation')
+                 f'Non-linear transformation with {activation}')
     plot_bases(bases_squashed, show=True)
 
 
